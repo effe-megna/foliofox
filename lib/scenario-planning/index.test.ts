@@ -5,8 +5,9 @@ import {
   isEventActiveInMonth,
   makeOneOff,
   makeRecurring,
-  ld,
+  makeEvent,
 } from "./index";
+import { ld } from "./local-date";
 
 const prettyLog = (data: unknown) => {
   console.log(JSON.stringify(data, null, 2));
@@ -16,112 +17,130 @@ describe("isEventActiveThisMonth", () => {
   test("one-off", () => {
     // Same month
     expect(
-      isEventActiveInMonth(ld(2023, 1, 2), {
-        tag: "one-off",
-        name: "Salary",
-        amount: 1000,
-        date: ld(2023, 1, 2),
-        type: "income",
-      }),
+      isEventActiveInMonth(
+        ld(2023, 1, 2),
+        makeOneOff({
+          name: "Salary",
+          amount: 1000,
+          date: ld(2023, 1, 2),
+          type: "income",
+        }),
+      ),
     ).toBe(true);
 
     // Different month
     expect(
-      isEventActiveInMonth(ld(2023, 2, 2), {
-        tag: "one-off",
-        name: "Salary",
-        amount: 1000,
-        date: ld(2023, 1, 2),
-        type: "income",
-      }),
+      isEventActiveInMonth(
+        ld(2023, 2, 2),
+        makeOneOff({
+          name: "Salary",
+          amount: 1000,
+          date: ld(2023, 1, 2),
+          type: "income",
+        }),
+      ),
     ).toBe(false);
 
     // Different year same month
     expect(
-      isEventActiveInMonth(ld(2024, 1, 2), {
-        tag: "one-off",
-        name: "Salary",
-        amount: 1000,
-        date: ld(2023, 1, 2),
-        type: "income",
-      }),
+      isEventActiveInMonth(
+        ld(2024, 1, 2),
+        makeOneOff({
+          name: "Salary",
+          amount: 1000,
+          date: ld(2023, 1, 2),
+          type: "income",
+        }),
+      ),
     ).toBe(false);
   });
 
   describe("recurring", () => {
     test("monthly", () => {
       expect(
-        isEventActiveInMonth(ld(2023, 1, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2024, 1, 2),
-          endDate: ld(2025, 12, 31),
-          type: "expense",
-          frequency: "monthly",
-        }),
+        isEventActiveInMonth(
+          ld(2023, 1, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2024, 1, 2),
+            endDate: ld(2025, 12, 31),
+            type: "expense",
+            frequency: "monthly",
+          }),
+        ),
       ).toBe(false);
 
       expect(
-        isEventActiveInMonth(ld(2024, 1, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2024, 2, 2),
-          endDate: ld(2025, 12, 31),
-          type: "expense",
-          frequency: "monthly",
-        }),
+        isEventActiveInMonth(
+          ld(2024, 1, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2024, 2, 2),
+            endDate: ld(2025, 12, 31),
+            type: "expense",
+            frequency: "monthly",
+          }),
+        ),
       ).toBe(false);
 
       expect(
-        isEventActiveInMonth(ld(2024, 5, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2024, 2, 2),
-          endDate: ld(2025, 12, 31),
-          type: "expense",
-          frequency: "monthly",
-        }),
+        isEventActiveInMonth(
+          ld(2024, 5, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2024, 2, 2),
+            endDate: ld(2025, 12, 31),
+            type: "expense",
+            frequency: "monthly",
+          }),
+        ),
       ).toBe(true);
 
       expect(
-        isEventActiveInMonth(ld(2025, 9, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2024, 2, 2),
-          endDate: ld(2025, 12, 31),
-          type: "expense",
-          frequency: "monthly",
-        }),
+        isEventActiveInMonth(
+          ld(2025, 9, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2024, 2, 2),
+            endDate: ld(2025, 12, 31),
+            type: "expense",
+            frequency: "monthly",
+          }),
+        ),
       ).toBe(true);
     });
 
     test("yearly", () => {
       expect(
-        isEventActiveInMonth(ld(2024, 1, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2021, 1, 2),
-          endDate: ld(2025, 12, 31),
-          type: "expense",
-          frequency: "yearly",
-        }),
+        isEventActiveInMonth(
+          ld(2024, 1, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2021, 1, 2),
+            endDate: ld(2025, 12, 31),
+            type: "expense",
+            frequency: "yearly",
+          }),
+        ),
       ).toBe(true);
 
       expect(
-        isEventActiveInMonth(ld(2021, 1, 2), {
-          tag: "recurring",
-          name: "Rent",
-          amount: 1000,
-          startDate: ld(2023, 1, 2),
-          endDate: ld(2023, 12, 31),
-          type: "expense",
-          frequency: "yearly",
-        }),
+        isEventActiveInMonth(
+          ld(2021, 1, 2),
+          makeRecurring({
+            name: "Rent",
+            amount: 1000,
+            startDate: ld(2023, 1, 2),
+            endDate: ld(2023, 12, 31),
+            type: "expense",
+            frequency: "yearly",
+          }),
+        ),
       ).toBe(false);
     });
   });
@@ -265,8 +284,6 @@ describe("scenario planning", () => {
       initialBalance: 10000,
     });
 
-    prettyLog(result);
-
     expect(result.balance).toMatchInlineSnapshot(`
       {
         "2025-01": 10600,
@@ -296,5 +313,56 @@ describe("scenario planning", () => {
         "2027-01": 17200,
       }
     `);
+  });
+
+  describe("conditions", () => {
+    describe("networth-is-above", () => {
+      test("should unlock event when salary is above", () => {
+        const scenario = makeScenario({
+          name: "",
+          events: [
+            makeRecurring({
+              name: "Salary",
+              frequency: "monthly",
+              startDate: ld(2025, 1, 1),
+              amount: 2000,
+              endDate: null,
+              type: "income",
+            }),
+            makeEvent({
+              name: "Holidays in South Korea 🇰🇷",
+              amount: 4000,
+              type: "expense",
+              unlockedBy: [
+                {
+                  type: "networth-is-above",
+                  tag: "balance",
+                  value: { eventRef: "Salary", amount: 6000 },
+                },
+              ],
+            }),
+          ],
+        });
+
+        const result = runScenario({
+          startDate: ld(2025, 1, 1),
+          endDate: ld(2025, 5, 1),
+          initialBalance: 0,
+          scenario,
+        });
+
+        expect(result.balance).toMatchInlineSnapshot(`
+          {
+            "2025-01": 2000,
+            "2025-02": 4000,
+            "2025-03": 6000,
+            "2025-04": 4000,
+            "2025-05": 6000,
+          }
+        `);
+      });
+    });
+
+    describe("event");
   });
 });
