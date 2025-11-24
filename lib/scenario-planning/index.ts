@@ -50,11 +50,22 @@ type CashflowConditions =
       value: { start: LocalDate; end: LocalDate | null };
     };
 
-type BalanceConditions = {
-  tag: "balance";
-  type: "networth-is-above";
-  value: { eventRef: string; amount: number };
-};
+type BalanceConditions =
+  | {
+      tag: "balance";
+      type: "networth-is-above";
+      value: { eventRef: string; amount: number };
+    }
+  | {
+      tag: "balance";
+      type: "event-happened";
+      value: { eventName: string };
+    }
+  | {
+      tag: "balance";
+      type: "income-is-above";
+      value: { eventName: string; amount: number };
+    };
 
 const makeScenario = (input: {
   name: string;
@@ -71,6 +82,15 @@ const isEventActiveInMonth = (
   const cashflowConditions = event.unlockedBy.filter(
     (c) => c.tag === "cashflow",
   );
+  const balanceConditions = event.unlockedBy.filter(
+    (c) => c.tag === "balance",
+  );
+
+  // If event has balance conditions, don't evaluate in cashflow phase
+  // It will be evaluated in balance phase
+  if (balanceConditions.length > 0) {
+    return false;
+  }
 
   if (cashflowConditions.length === 0) {
     return false;
@@ -179,6 +199,7 @@ const toBalance = (input: {
 
   const balance: Record<string, number> = {};
   const firedBalanceEvents = new Set<string>();
+  const firedEventNames = new Set<string>();
 
   let runningBalance = initialBalance;
 
@@ -188,24 +209,83 @@ const toBalance = (input: {
     runningBalance += cashflow[month].amount;
     balance[month] = runningBalance;
 
-    for (const event of scenario.events) {
-      if (firedBalanceEvents.has(event.name)) continue;
+    // Track which events fired this month (for event-happened condition)
+    for (const event of cashflow[month].events) {
+      firedEventNames.add(event.name);
+    }
 
-      const stateConditions = event.unlockedBy.filter(
+    for (const event of scenario.events) {
+      // For one-off events, skip if already fired
+      if (event.recurrence.type === "once" && firedBalanceEvents.has(event.name)) {
+        continue;
+      }
+
+      const balanceConditions = event.unlockedBy.filter(
         (c) => c.tag === "balance",
       );
+      const cashflowConditions = event.unlockedBy.filter(
+        (c) => c.tag === "cashflow",
+      );
 
-      if (stateConditions.length === 0) continue;
+      if (balanceConditions.length === 0) continue;
 
-      const unlocked = stateConditions.every((cond) => {
+      // Parse current month from string (e.g., "2025-01")
+      const [yearStr, monthStr] = month.split("-");
+      const currentMonth = ld(parseInt(yearStr), parseInt(monthStr), 1);
+
+      // Check cashflow conditions (date-based)
+      const cashflowConditionsMet = cashflowConditions.every((cond) => {
         switch (cond.type) {
-          case "networth-is-above":
-            return runningBalance > cond.value.amount;
+          case "date-is":
+            return isSameMonthLD(currentMonth, cond.value);
+
+          case "date-in-range": {
+            const start = startOfMonthLD(cond.value.start);
+            const end = cond.value.end
+              ? startOfMonthLD(cond.value.end)
+              : ld(2999, 12, 1);
+            return isWithinIntervalLD(currentMonth, { start, end });
+          }
         }
       });
 
-      // If unlocked and not already counted in this month, apply it
-      if (unlocked && !cashflow[month].events.includes(event)) {
+      if (!cashflowConditionsMet) continue;
+
+      // For recurring events, check recurrence pattern
+      if (event.recurrence.type === "yearly") {
+        const dateRangeCond = cashflowConditions.find(
+          (c): c is Extract<CashflowConditions, { type: "date-in-range" }> =>
+            c.type === "date-in-range",
+        );
+        if (dateRangeCond) {
+          const startMonth = dateRangeCond.value.start.m;
+          if (currentMonth.m !== startMonth) {
+            continue;
+          }
+        }
+      }
+
+      // Check balance conditions
+      const balanceConditionsMet = balanceConditions.every((cond) => {
+        switch (cond.type) {
+          case "networth-is-above":
+            return runningBalance > cond.value.amount;
+
+          case "event-happened":
+            return firedEventNames.has(cond.value.eventName);
+
+          case "income-is-above": {
+            // Find the referenced income event in the current month's events
+            const incomeEvent = cashflow[month].events.find(
+              (e) => e.name === cond.value.eventName && e.type === "income",
+            );
+            return incomeEvent ? incomeEvent.amount >= cond.value.amount : false;
+          }
+        }
+      });
+
+      // If all conditions met and not already counted in this month, apply it
+      if (balanceConditionsMet && !cashflow[month].events.includes(event)) {
         const value = event.type === "income" ? event.amount : -event.amount;
         cashflow[month].amount += value;
         cashflow[month].events.push(event);
@@ -214,7 +294,11 @@ const toBalance = (input: {
         runningBalance += value;
         balance[month] = runningBalance;
 
-        firedBalanceEvents.add(event.name);
+        // Only track one-off events to prevent duplicate firing
+        if (event.recurrence.type === "once") {
+          firedBalanceEvents.add(event.name);
+        }
+        firedEventNames.add(event.name);
       }
     }
   }

@@ -363,6 +363,327 @@ describe("scenario planning", () => {
       });
     });
 
-    describe("event");
+    describe("event-happened", () => {
+      test("should unlock event only after another event happens", () => {
+        const scenario = makeScenario({
+          name: "Car purchase and insurance",
+          events: [
+            makeRecurring({
+              name: "Salary",
+              frequency: "monthly",
+              startDate: ld(2025, 1, 1),
+              amount: 2000,
+              endDate: null,
+              type: "income",
+            }),
+            makeOneOff({
+              name: "Buy Car",
+              amount: 10000,
+              type: "expense",
+              date: ld(2026, 1, 15),
+            }),
+            makeRecurring({
+              name: "Car Insurance",
+              amount: 120,
+              type: "expense",
+              frequency: "monthly",
+              startDate: ld(2026, 1, 1),
+              endDate: null,
+              unlockedBy: [
+                {
+                  type: "event-happened",
+                  tag: "balance",
+                  value: { eventName: "Buy Car" },
+                },
+              ],
+            }),
+          ],
+        });
+
+        const result = runScenario({
+          startDate: ld(2025, 12, 1),
+          endDate: ld(2026, 3, 1),
+          initialBalance: 0,
+          scenario,
+        });
+
+        // Car insurance should NOT appear in Dec 2025 (car not bought yet)
+        expect(result.balance["2025-12"]).toBe(2000);
+
+        // Car insurance SHOULD appear starting Jan 2026 (after car purchase)
+        // Jan: +2000 salary -10000 car -120 insurance = -8120
+        expect(result.balance["2026-01"]).toBe(2000 - 8120);
+
+        // Feb: +2000 salary -120 insurance
+        expect(result.balance["2026-02"]).toBe(2000 - 8120 + 2000 - 120);
+      });
+    });
+
+    describe("income-is-above", () => {
+      test("should unlock event only when income meets threshold", () => {
+        const scenario = makeScenario({
+          name: "Holiday conditional on salary",
+          events: [
+            makeRecurring({
+              name: "Salary",
+              frequency: "monthly",
+              startDate: ld(2025, 1, 1),
+              amount: 2500, // Part-time
+              endDate: ld(2025, 5, 31),
+              type: "income",
+            }),
+            makeRecurring({
+              name: "Salary",
+              frequency: "monthly",
+              startDate: ld(2025, 6, 1),
+              amount: 5000, // Full-time starts June
+              endDate: null,
+              type: "income",
+            }),
+            makeOneOff({
+              name: "Summer Holiday",
+              amount: 3500,
+              type: "expense",
+              date: ld(2025, 7, 15),
+              unlockedBy: [
+                {
+                  type: "income-is-above",
+                  tag: "balance",
+                  value: { eventName: "Salary", amount: 4000 },
+                },
+              ],
+            }),
+          ],
+        });
+
+        const result = runScenario({
+          startDate: ld(2025, 1, 1),
+          endDate: ld(2025, 8, 1),
+          initialBalance: 0,
+          scenario,
+        });
+
+        // Holiday should happen in July because salary is 5000 >= 4000
+        expect(result.balance["2025-07"]).toBe(
+          2500 * 5 + 5000 * 2 - 3500, // 5 months @ 2500 + 2 months @ 5000 - holiday
+        );
+      });
+    });
+  });
+
+  describe("real-case scenario: Francesco's financial plan", () => {
+    test("should handle complex multi-year scenario with conditional events", () => {
+      const scenario = makeScenario({
+        name: "Francesco's Financial Plan 2025-2027",
+        events: [
+          // Current financial state
+          // Note: Initial balance of 140K (100K cash + 40K invested) set in runScenario
+
+          // Part-time job
+          makeRecurring({
+            name: "Part-time Salary",
+            amount: 2500,
+            frequency: "monthly",
+            type: "income",
+            startDate: ld(2025, 1, 1),
+            endDate: ld(2025, 5, 31), // Assuming returns to full-time in June
+          }),
+
+          // Full-time job returns
+          makeRecurring({
+            name: "Full-time Salary",
+            amount: 5000,
+            frequency: "monthly",
+            type: "income",
+            startDate: ld(2025, 6, 1),
+            endDate: null,
+          }),
+
+          // Cost of living
+          makeRecurring({
+            name: "Cost of Life",
+            amount: 1400,
+            frequency: "monthly",
+            type: "expense",
+            startDate: ld(2025, 1, 1),
+            endDate: null,
+          }),
+
+          // Investment contributions - only when back to full-time
+          makeRecurring({
+            name: "Monthly Investment",
+            amount: 400,
+            frequency: "monthly",
+            type: "expense",
+            startDate: ld(2025, 6, 1),
+            endDate: null,
+            unlockedBy: [
+              {
+                type: "income-is-above",
+                tag: "balance",
+                value: { eventName: "Full-time Salary", amount: 4000 },
+              },
+            ],
+          }),
+
+          // Car purchase
+          makeOneOff({
+            name: "Buy Car",
+            amount: 15000,
+            type: "expense",
+            date: ld(2026, 1, 15),
+          }),
+
+          // Car insurance - only after buying car
+          makeRecurring({
+            name: "Car Insurance",
+            amount: 120,
+            frequency: "monthly",
+            type: "expense",
+            startDate: ld(2026, 1, 1),
+            endDate: null,
+            unlockedBy: [
+              {
+                type: "event-happened",
+                tag: "balance",
+                value: { eventName: "Buy Car" },
+              },
+            ],
+          }),
+
+          // Car maintenance - only after buying car
+          makeRecurring({
+            name: "Car Maintenance",
+            amount: 600,
+            frequency: "yearly",
+            type: "expense",
+            startDate: ld(2026, 1, 1),
+            endDate: null,
+            unlockedBy: [
+              {
+                type: "event-happened",
+                tag: "balance",
+                value: { eventName: "Buy Car" },
+              },
+            ],
+          }),
+
+          // Holiday - conditional on salary
+          makeOneOff({
+            name: "Summer Holiday 2026",
+            amount: 3500,
+            type: "expense",
+            date: ld(2026, 6, 15),
+            unlockedBy: [
+              {
+                type: "income-is-above",
+                tag: "balance",
+                value: { eventName: "Full-time Salary", amount: 4000 },
+              },
+            ],
+          }),
+
+          // House purchase - low downpayment scenario (salary < 5000)
+          makeOneOff({
+            name: "Buy House - Low Downpayment",
+            amount: 60000,
+            type: "expense",
+            date: ld(2027, 5, 1),
+            unlockedBy: [
+              {
+                type: "income-is-above",
+                tag: "balance",
+                value: { eventName: "Full-time Salary", amount: 4000 },
+              },
+            ],
+          }),
+
+          // Mortgage - only after buying house
+          makeRecurring({
+            name: "Mortgage Payment",
+            amount: 1200,
+            frequency: "monthly",
+            type: "expense",
+            startDate: ld(2027, 5, 1),
+            endDate: null,
+            unlockedBy: [
+              {
+                type: "event-happened",
+                tag: "balance",
+                value: { eventName: "Buy House - Low Downpayment" },
+              },
+            ],
+          }),
+
+          // House expenses - only after buying house
+          makeRecurring({
+            name: "Property Tax",
+            amount: 3000,
+            frequency: "yearly",
+            type: "expense",
+            startDate: ld(2027, 5, 1),
+            endDate: null,
+            unlockedBy: [
+              {
+                type: "event-happened",
+                tag: "balance",
+                value: { eventName: "Buy House - Low Downpayment" },
+              },
+            ],
+          }),
+        ],
+      });
+
+      const result = runScenario({
+        scenario,
+        startDate: ld(2025, 1, 1),
+        endDate: ld(2027, 12, 31),
+        initialBalance: 140000, // 100K cash + 40K invested
+      });
+
+      // Verify key milestones
+
+      // Jan 2025: Part-time, no investments yet
+      expect(result.balance["2025-01"]).toBe(140000 + 2500 - 1400);
+
+      // June 2025: Full-time starts, investments begin
+      const balanceMay2025 = 140000 + (2500 - 1400) * 5; // 5 months part-time
+      expect(result.balance["2025-06"]).toBe(
+        balanceMay2025 + 5000 - 1400 - 400,
+      );
+
+      // Jan 2026: Car purchase
+      // Should include car, insurance, and maintenance
+      const balanceDec2025 = balanceMay2025 + (5000 - 1400 - 400) * 7; // 7 months full-time with investments
+      expect(result.balance["2026-01"]).toBe(
+        balanceDec2025 + 5000 - 1400 - 400 - 15000 - 120 - 600,
+      );
+
+      // June 2026: Holiday should happen (salary >= 4000)
+      const balanceMay2026 =
+        balanceDec2025 + (5000 - 1400 - 400 - 120) * 5 - 15000 - 600; // 5 months with car costs
+      expect(result.balance["2026-06"]).toBe(
+        balanceMay2026 + 5000 - 1400 - 400 - 120 - 3500,
+      );
+
+      // May 2027: House purchase with mortgage starting
+      // Verify house was purchased and mortgage started
+      expect(result.cashflow["2027-05"].events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Buy House - Low Downpayment" }),
+          expect.objectContaining({ name: "Mortgage Payment" }),
+          expect.objectContaining({ name: "Property Tax" }),
+        ]),
+      );
+
+      // Verify mortgage continues in June 2027
+      expect(result.cashflow["2027-06"].events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Mortgage Payment" }),
+        ]),
+      );
+
+      prettyLog(result.cashflow);
+    });
   });
 });
