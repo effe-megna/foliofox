@@ -14,6 +14,7 @@ import {
 
 import { formatCurrency, formatCompactNumber } from "@/lib/number-format";
 import type { ScenarioEvent } from "@/lib/scenario-planning";
+import type { EventDependencyAnalysis } from "@/lib/scenario-planning/event-analyzer";
 
 interface ScenarioResult {
   balance: Record<string, number>;
@@ -27,12 +28,14 @@ interface ScenarioChartProps {
   result: ScenarioResult;
   currency: string;
   privacyMode?: boolean;
+  analysis?: EventDependencyAnalysis;
 }
 
 export function ScenarioChart({
   result,
   currency,
   privacyMode = false,
+  analysis,
 }: ScenarioChartProps) {
   // Convert scenario result to chart data format
   const chartData = useMemo(() => {
@@ -201,23 +204,111 @@ export function ScenarioChart({
                     <span className="text-muted-foreground text-xs font-medium">
                       Events ({monthData.events.length}):
                     </span>
-                    <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
-                      {monthData.events.map((event, idx) => {
-                        const value = event.type === "income" ? event.amount : -event.amount;
-                        return (
-                          <div key={idx} className="flex items-center justify-between gap-2 text-xs">
-                            <span className="text-muted-foreground truncate">{event.name}</span>
-                            <span
-                              className={`font-medium whitespace-nowrap ${
-                                value >= 0 ? "text-green-600" : "text-red-600"
-                              }`}
-                            >
-                              {value >= 0 ? "+" : ""}
-                              {privacyMode ? "***" : formatCurrency(value, currency)}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <div className="flex flex-col gap-1">
+                      {(() => {
+                        // Build event hierarchy
+                        const eventsToRender: Array<{
+                          event?: ScenarioEvent;
+                          isTriggered: boolean;
+                          triggerEvent?: string;
+                          isReference?: boolean;
+                        }> = [];
+
+                        // Create a map of triggered events
+                        const triggeredEventsMap = new Map<string, string>();
+                        if (analysis) {
+                          analysis.triggeredEvents.forEach((item) => {
+                            triggeredEventsMap.set(item.event.name, item.triggerEvent);
+                          });
+                        }
+
+                        // Create a set of event names present this month
+                        const eventNamesThisMonth = new Set(monthData.events.map(e => e.name));
+
+                        // Group events by their trigger parent
+                        const eventsByParent = new Map<string, ScenarioEvent[]>();
+                        const independentEvents: ScenarioEvent[] = [];
+
+                        monthData.events.forEach((event) => {
+                          const triggerEvent = triggeredEventsMap.get(event.name);
+                          if (triggerEvent) {
+                            // This event has a trigger parent
+                            if (!eventsByParent.has(triggerEvent)) {
+                              eventsByParent.set(triggerEvent, []);
+                            }
+                            eventsByParent.get(triggerEvent)!.push(event);
+                          } else {
+                            // This is an independent event
+                            independentEvents.push(event);
+                          }
+                        });
+
+                        // First, add all independent events
+                        independentEvents.forEach((event) => {
+                          eventsToRender.push({
+                            event,
+                            isTriggered: false,
+                          });
+                        });
+
+                        // Then, for each triggered event group, show parent + children
+                        eventsByParent.forEach((children, parentName) => {
+                          // Check if parent is actually firing this month
+                          const parentFiring = eventNamesThisMonth.has(parentName);
+
+                          if (!parentFiring) {
+                            // Add parent as reference (not firing)
+                            eventsToRender.push({
+                              triggerEvent: parentName,
+                              isTriggered: false,
+                              isReference: true,
+                            });
+                          }
+
+                          // Add all children
+                          children.forEach((child) => {
+                            eventsToRender.push({
+                              event: child,
+                              isTriggered: true,
+                              triggerEvent: parentName,
+                            });
+                          });
+                        });
+
+                        return eventsToRender.map((item, idx) => {
+                          if (item.isReference) {
+                            // This is a parent reference (not firing this month)
+                            return (
+                              <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                                <span className="text-muted-foreground/60 truncate italic">
+                                  {item.triggerEvent}
+                                </span>
+                                <span className="text-muted-foreground/60 text-xs italic whitespace-nowrap">
+                                  (trigger)
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          const value = item.event!.type === "income" ? item.event!.amount : -item.event!.amount;
+                          return (
+                            <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                              <span className={`text-muted-foreground truncate ${item.isTriggered ? "pl-3" : ""}`}>
+                                {item.isTriggered && "├─ "}
+                                {item.event!.name}
+                              </span>
+                              <span
+                                className={`font-medium whitespace-nowrap ${
+                                  value >= 0 ? "text-green-600" : "text-red-600"
+                                }`}
+                              >
+                                {value >= 0 ? "+" : ""}
+                                {privacyMode ? "***" : formatCurrency(value, currency)}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 )}

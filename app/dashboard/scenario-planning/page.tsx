@@ -10,6 +10,9 @@ import {
 } from "@/lib/scenario-planning";
 import { ld } from "@/lib/scenario-planning/local-date";
 import { ScenarioChart } from "@/components/dashboard/scenario-planning/scenario-chart";
+import { EventFlowTimeline } from "@/components/dashboard/scenario-planning/event-flow-timeline";
+import { EventDetailsList } from "@/components/dashboard/scenario-planning/event-details-list";
+import { analyzeEventDependencies } from "@/lib/scenario-planning/event-analyzer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -18,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ScenarioPlanningPage() {
   const [timeHorizon, setTimeHorizon] = useState<"2" | "5" | "10" | "30">("5");
@@ -28,7 +32,7 @@ export default function ScenarioPlanningPage() {
   }, [timeHorizon]);
 
   // Create Francesco's real-case scenario (adapted to selected dates)
-  const scenarioResult = useMemo(() => {
+  const { scenarioResult, scenario } = useMemo(() => {
     const start = new Date();
     const end = endDate;
     const scenario = makeScenario({
@@ -189,12 +193,14 @@ export default function ScenarioPlanningPage() {
       ],
     });
 
-    return runScenario({
+    const scenarioResult = runScenario({
       scenario,
       startDate: ld(start.getFullYear(), start.getMonth() + 1, start.getDate()),
       endDate: ld(end.getFullYear(), end.getMonth() + 1, end.getDate()),
       initialBalance: 140000, // 100K cash + 40K invested
     });
+
+    return { scenario, scenarioResult };
   }, [endDate]);
 
   // Get final balance
@@ -203,6 +209,11 @@ export default function ScenarioPlanningPage() {
     const lastMonth = months[months.length - 1];
     return scenarioResult.balance[lastMonth] ?? 0;
   }, [scenarioResult]);
+
+  // Analyze event dependencies
+  const analysis = useMemo(() => {
+    return analyzeEventDependencies(scenario, scenarioResult);
+  }, [scenario, scenarioResult]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -214,42 +225,79 @@ export default function ScenarioPlanningPage() {
       </div>
 
       <div className="grid gap-6">
-        {/* Chart Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-1.5">
-                <CardTitle>Balance Over Time</CardTitle>
+        {/* Tabs */}
+        <Tabs defaultValue="balance" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="balance">Balance Chart</TabsTrigger>
+            <TabsTrigger value="logic">Event Logic</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="balance" className="space-y-4">
+            {/* Chart Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col gap-1.5">
+                    <CardTitle>Balance Over Time</CardTitle>
+                    <CardDescription>
+                      Financial projection with conditional events
+                    </CardDescription>
+                  </div>
+                  <Select
+                    value={timeHorizon}
+                    onValueChange={(value) => setTimeHorizon(value as "2" | "5" | "10" | "30")}
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Time horizon" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 years</SelectItem>
+                      <SelectItem value="5">5 years</SelectItem>
+                      <SelectItem value="10">10 years</SelectItem>
+                      <SelectItem value="30">30 years</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px]">
+                  <ScenarioChart
+                    result={scenarioResult}
+                    currency="USD"
+                    privacyMode={false}
+                    analysis={analysis}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="logic" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Event Flow Timeline</CardTitle>
                 <CardDescription>
-                  Financial projection with conditional events
+                  See when events fire and what they trigger over time
                 </CardDescription>
-              </div>
-              <Select
-                value={timeHorizon}
-                onValueChange={(value) => setTimeHorizon(value as "2" | "5" | "10" | "30")}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Time horizon" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2">2 years</SelectItem>
-                  <SelectItem value="5">5 years</SelectItem>
-                  <SelectItem value="10">10 years</SelectItem>
-                  <SelectItem value="30">30 years</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px]">
-              <ScenarioChart
-                result={scenarioResult}
-                currency="USD"
-                privacyMode={false}
-              />
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent>
+                <EventFlowTimeline analysis={analysis} currency="USD" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Event Dependencies</CardTitle>
+                <CardDescription>
+                  Explore events grouped by their conditions and dependencies
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EventDetailsList analysis={analysis} currency="USD" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Summary Stats */}
         <div className="grid gap-4 md:grid-cols-3">
