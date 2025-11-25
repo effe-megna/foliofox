@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { addYears } from "date-fns";
 import {
   makeScenario,
@@ -11,6 +11,7 @@ import {
 import { ld } from "@/lib/scenario-planning/local-date";
 import { ScenarioChart } from "@/components/dashboard/scenario-planning/scenario-chart";
 import { EventFlowTimeline } from "@/components/dashboard/scenario-planning/event-flow-timeline";
+import { CompactEventTimeline } from "@/components/dashboard/scenario-planning/compact-event-timeline";
 import { EventDetailsList } from "@/components/dashboard/scenario-planning/event-details-list";
 import { analyzeEventDependencies } from "@/lib/scenario-planning/event-analyzer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ScenarioPlanningPage() {
   const [timeHorizon, setTimeHorizon] = useState<"2" | "5" | "10" | "30">("5");
+  const [isDesktop, setIsDesktop] = useState(true);
+
+  // Detect screen size for responsive timeline
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
 
   // Calculate end date based on time horizon
   const endDate = useMemo(() => {
@@ -277,11 +291,17 @@ export default function ScenarioPlanningPage() {
               <CardHeader>
                 <CardTitle>Event Flow Timeline</CardTitle>
                 <CardDescription>
-                  See when events fire and what they trigger over time
+                  {isDesktop
+                    ? "Compact timeline showing all events at a glance"
+                    : "See when events fire and what they trigger over time"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <EventFlowTimeline analysis={analysis} currency="USD" />
+                {isDesktop ? (
+                  <CompactEventTimeline analysis={analysis} currency="USD" />
+                ) : (
+                  <EventFlowTimeline analysis={analysis} currency="USD" />
+                )}
               </CardContent>
             </Card>
 

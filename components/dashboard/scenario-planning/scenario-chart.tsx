@@ -331,38 +331,29 @@ export function ScenarioChart({
           }}
         />
 
-        {/* Event markers */}
+        {/* Event markers - one per month colored by net cashflow */}
         {eventMarkers.map((marker, markerIndex) => {
-          return marker.events.map((event, eventIndex) => {
-            const horizontalOffset = eventIndex * 12 - (marker.events.length - 1) * 6;
-            const isIncome = event.type === "income";
+          // Calculate net cashflow for this month
+          const netCashflow = marker.events.reduce((sum, event) => {
+            const amount = event.type === "income" ? event.amount : -event.amount;
+            return sum + amount;
+          }, 0);
 
-            return (
-              <ReferenceDot
-                key={`${markerIndex}-${eventIndex}`}
-                x={marker.timestamp}
-                y={marker.balance}
-                r={0}
-                fill="transparent"
-                stroke="transparent"
-                shape={(props: any) => {
-                  const { cx, cy } = props;
-                  const adjustedCx = cx + horizontalOffset;
+          const markerColor = netCashflow >= 0
+            ? "oklch(0.72 0.19 150)" // green for positive
+            : "oklch(0.64 0.21 25)";  // red for negative
 
-                  return (
-                    <circle
-                      cx={adjustedCx}
-                      cy={cy}
-                      r={5}
-                      fill={isIncome ? "oklch(0.72 0.19 150)" : "oklch(0.64 0.21 25)"}
-                      stroke="var(--background)"
-                      strokeWidth={2}
-                    />
-                  );
-                }}
-              />
-            );
-          });
+          return (
+            <ReferenceDot
+              key={markerIndex}
+              x={marker.timestamp}
+              y={marker.balance}
+              r={6}
+              fill={markerColor}
+              stroke="var(--background)"
+              strokeWidth={2}
+            />
+          );
         })}
       </AreaChart>
     </ResponsiveContainer>
