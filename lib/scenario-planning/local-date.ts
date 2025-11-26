@@ -30,6 +30,11 @@ const isBeforeLD = (a: LocalDate, b: LocalDate): boolean => compareLD(a, b) < 0;
 const isSameDayLD = (a: LocalDate, b: LocalDate): boolean =>
   compareLD(a, b) === 0;
 
+const isWithinIntervalLD = (
+  d: LocalDate,
+  range: { start: LocalDate; end: LocalDate },
+): boolean => !isBeforeLD(d, range.start) && !isAfterLD(d, range.end);
+
 export {
   type LocalDate,
   ld,
@@ -41,4 +46,5 @@ export {
   isAfterLD,
   isBeforeLD,
   isSameDayLD,
+  isWithinIntervalLD,
 };

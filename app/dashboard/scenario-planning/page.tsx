@@ -1,20 +1,29 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { addYears } from "date-fns";
 import {
   makeScenario,
   runScenario,
   makeRecurring,
   makeOneOff,
+  makeDependency,
 } from "@/lib/scenario-planning";
-import { ld } from "@/lib/scenario-planning/local-date";
+import { fromJSDate, ld } from "@/lib/scenario-planning/local-date";
 import { ScenarioChart } from "@/components/dashboard/scenario-planning/scenario-chart";
 import { EventFlowTimeline } from "@/components/dashboard/scenario-planning/event-flow-timeline";
 import { CompactEventTimeline } from "@/components/dashboard/scenario-planning/compact-event-timeline";
 import { EventDetailsList } from "@/components/dashboard/scenario-planning/event-details-list";
+import { EventToggleToolbar } from "@/components/dashboard/scenario-planning/event-toggle-toolbar";
 import { analyzeEventDependencies } from "@/lib/scenario-planning/event-analyzer";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { EventDependencyAnalysis } from "@/lib/scenario-planning/event-analyzer";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -45,12 +54,10 @@ export default function ScenarioPlanningPage() {
     return addYears(new Date(), parseInt(timeHorizon));
   }, [timeHorizon]);
 
-  // Create Francesco's real-case scenario (adapted to selected dates)
-  const { scenarioResult, scenario } = useMemo(() => {
-    const start = new Date();
-    const end = endDate;
+  // Create the full scenario first (for toolbar display)
+  const fullScenario = useMemo(() => {
     const scenario = makeScenario({
-      name: "Francesco's Financial Plan 2025-2027",
+      name: "Francesco's Financial Plan",
       events: [
         // Part-time job
         makeRecurring({
@@ -59,7 +66,7 @@ export default function ScenarioPlanningPage() {
           frequency: "monthly",
           type: "income",
           startDate: ld(2025, 1, 1),
-          endDate: ld(2025, 5, 31),
+          endDate: ld(2026, 3, 31),
         }),
 
         // Full-time job returns
@@ -68,14 +75,14 @@ export default function ScenarioPlanningPage() {
           amount: 5000,
           frequency: "monthly",
           type: "income",
-          startDate: ld(2025, 6, 1),
+          startDate: ld(2026, 4, 1),
           endDate: null,
         }),
 
         // Cost of living
         makeRecurring({
           name: "Cost of Life",
-          amount: 1400,
+          amount: 2400,
           frequency: "monthly",
           type: "expense",
           startDate: ld(2025, 1, 1),
@@ -85,7 +92,7 @@ export default function ScenarioPlanningPage() {
         // Investment contributions - only when back to full-time
         makeRecurring({
           name: "Monthly Investment",
-          amount: 400,
+          amount: 500,
           frequency: "monthly",
           type: "expense",
           startDate: ld(2025, 6, 1),
@@ -102,7 +109,7 @@ export default function ScenarioPlanningPage() {
         // Car purchase
         makeOneOff({
           name: "Buy Car",
-          amount: 15000,
+          amount: 10000,
           type: "expense",
           date: ld(2026, 1, 15),
         }),
@@ -110,7 +117,7 @@ export default function ScenarioPlanningPage() {
         // Car insurance - only after buying car
         makeRecurring({
           name: "Car Insurance",
-          amount: 120,
+          amount: 150,
           frequency: "monthly",
           type: "expense",
           startDate: ld(2026, 1, 1),
@@ -207,15 +214,60 @@ export default function ScenarioPlanningPage() {
       ],
     });
 
+    return scenario;
+  }, []);
+
+  // State for enabled events (initialize with all events enabled)
+  const [enabledEventNames, setEnabledEventNames] = useState<Set<string>>(
+    () => {
+      return new Set(fullScenario.events.map((e) => e.name));
+    },
+  );
+
+  // Helper function to get dependent events recursively
+  const getDependentEvents = useCallback(
+    (eventName: string, tempAnalysis: EventDependencyAnalysis): Set<string> => {
+      const dependents = new Set<string>();
+
+      for (const triggered of tempAnalysis.triggeredEvents) {
+        if (triggered.triggerEvent === eventName) {
+          dependents.add(triggered.event.name);
+          // Recursively get children of children
+          getDependentEvents(triggered.event.name, tempAnalysis).forEach(
+            (name) => dependents.add(name),
+          );
+        }
+      }
+
+      return dependents;
+    },
+    [],
+  );
+
+  // Run scenario with filtered events
+  const { scenarioResult, scenario } = useMemo(() => {
+    const start = new Date();
+    const end = endDate;
+
+    // Filter events based on toggles
+    const filteredEvents = fullScenario.events.filter((event) =>
+      enabledEventNames.has(event.name),
+    );
+
+    const scenario = {
+      ...fullScenario,
+      events: filteredEvents,
+    };
+
     const scenarioResult = runScenario({
       scenario,
-      startDate: ld(start.getFullYear(), start.getMonth() + 1, start.getDate()),
-      endDate: ld(end.getFullYear(), end.getMonth() + 1, end.getDate()),
+      startDate: fromJSDate(start),
+      endDate: fromJSDate(end),
       initialBalance: 140000, // 100K cash + 40K invested
     });
 
     return { scenario, scenarioResult };
-  }, [endDate]);
+  }, [endDate, fullScenario, enabledEventNames]);
 
   // Get final balance
   const finalBalance = useMemo(() => {
@@ -228,6 +280,27 @@ export default function ScenarioPlanningPage() {
   const analysis = useMemo(() => {
     return analyzeEventDependencies(scenario, scenarioResult);
   }, [scenario, scenarioResult]);
+
+  // Handle event toggle with cascade
+  const handleEventToggle = useCallback(
+    (eventName: string, enabled: boolean) => {
+      const newEnabled = new Set(enabledEventNames);
+
+      if (enabled) {
+        newEnabled.add(eventName);
+      } else {
+        // Disable event
+        newEnabled.delete(eventName);
+
+        // Auto-disable all dependents
+        const dependents = getDependentEvents(eventName, analysis);
+        dependents.forEach((name) => newEnabled.delete(name));
+      }
+
+      setEnabledEventNames(newEnabled);
+    },
+    [enabledEventNames, analysis, getDependentEvents],
+  );
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -259,7 +332,9 @@ export default function ScenarioPlanningPage() {
                   </div>
                   <Select
                     value={timeHorizon}
-                    onValueChange={(value) => setTimeHorizon(value as "2" | "5" | "10" | "30")}
+                    onValueChange={(value) =>
+                      setTimeHorizon(value as "2" | "5" | "10" | "30")
+                    }
                   >
                     <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Time horizon" />
@@ -319,6 +394,25 @@ export default function ScenarioPlanningPage() {
           </TabsContent>
         </Tabs>
 
+        {/* Event Toggle Toolbar */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Events</CardTitle>
+            <CardDescription>
+              Toggle events to explore what-if scenarios
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EventToggleToolbar
+              scenario={fullScenario}
+              enabledEvents={enabledEventNames}
+              onToggle={handleEventToggle}
+              analysis={analysis}
+            />
+          </CardContent>
+        </Card>
+
+
         {/* Summary Stats */}
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -332,7 +426,14 @@ export default function ScenarioPlanningPage() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>Final Balance ({endDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })})</CardDescription>
+              <CardDescription>
+                Final Balance (
+                {endDate.toLocaleDateString("en-US", {
+                  month: "short",
+                  year: "numeric",
+                })}
+                )
+              </CardDescription>
               <CardTitle className="text-2xl">
                 ${finalBalance.toLocaleString()}
               </CardTitle>
@@ -343,8 +444,8 @@ export default function ScenarioPlanningPage() {
             <CardHeader className="pb-3">
               <CardDescription>Total Change</CardDescription>
               <CardTitle className="text-2xl">
-                {(finalBalance - 140000) >= 0 ? "+" : ""}
-                ${(finalBalance - 140000).toLocaleString()}
+                {finalBalance - 140000 >= 0 ? "+" : ""}$
+                {(finalBalance - 140000).toLocaleString()}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -354,7 +455,9 @@ export default function ScenarioPlanningPage() {
         <Card>
           <CardHeader>
             <CardTitle>Major Events</CardTitle>
-            <CardDescription>Key milestones in your financial plan</CardDescription>
+            <CardDescription>
+              Key milestones in your financial plan
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
@@ -364,8 +467,9 @@ export default function ScenarioPlanningPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">Return to Full-Time (June 2025)</p>
-                  <p className="text-sm text-muted-foreground">
-                    Salary increases to $5,000/month, investments resume at $400/month
+                  <p className="text-muted-foreground text-sm">
+                    Salary increases to $5,000/month, investments resume at
+                    $400/month
                   </p>
                 </div>
               </div>
@@ -376,8 +480,9 @@ export default function ScenarioPlanningPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">Car Purchase (January 2026)</p>
-                  <p className="text-sm text-muted-foreground">
-                    $15,000 purchase triggers insurance ($120/month) and maintenance ($600/year)
+                  <p className="text-muted-foreground text-sm">
+                    $15,000 purchase triggers insurance ($120/month) and
+                    maintenance ($600/year)
                   </p>
                 </div>
               </div>
@@ -388,7 +493,7 @@ export default function ScenarioPlanningPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">Summer Holiday (June 2026)</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     $3,500 vacation unlocked by salary threshold
                   </p>
                 </div>
@@ -400,8 +505,9 @@ export default function ScenarioPlanningPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">House Purchase (May 2027)</p>
-                  <p className="text-sm text-muted-foreground">
-                    $60,000 down payment triggers mortgage ($1,200/month) and property tax ($3,000/year)
+                  <p className="text-muted-foreground text-sm">
+                    $60,000 down payment triggers mortgage ($1,200/month) and
+                    property tax ($3,000/year)
                   </p>
                 </div>
               </div>

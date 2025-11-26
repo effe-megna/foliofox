@@ -10,20 +10,15 @@
 
 import {
   LocalDate,
-  isBeforeLD,
   isAfterLD,
   addMonthsLD,
   startOfMonthLD,
   toKeyMonth,
   ld,
+  isWithinIntervalLD,
 } from "./local-date";
+import { makeDependency } from "./helpers";
 
-const isWithinIntervalLD = (
-  d: LocalDate,
-  range: { start: LocalDate; end: LocalDate },
-): boolean => !isBeforeLD(d, range.start) && !isAfterLD(d, range.end);
-
-// Scenario types
 type Scenario = {
   name: string;
   events: Array<ScenarioEvent>;
@@ -82,9 +77,7 @@ const isEventActiveInMonth = (
   const cashflowConditions = event.unlockedBy.filter(
     (c) => c.tag === "cashflow",
   );
-  const balanceConditions = event.unlockedBy.filter(
-    (c) => c.tag === "balance",
-  );
+  const balanceConditions = event.unlockedBy.filter((c) => c.tag === "balance");
 
   // If event has balance conditions, don't evaluate in cashflow phase
   // It will be evaluated in balance phase
@@ -216,7 +209,10 @@ const toBalance = (input: {
 
     for (const event of scenario.events) {
       // For one-off events, skip if already fired
-      if (event.recurrence.type === "once" && firedBalanceEvents.has(event.name)) {
+      if (
+        event.recurrence.type === "once" &&
+        firedBalanceEvents.has(event.name)
+      ) {
         continue;
       }
 
@@ -279,7 +275,9 @@ const toBalance = (input: {
             const incomeEvent = cashflow[month].events.find(
               (e) => e.name === cond.value.eventName && e.type === "income",
             );
-            return incomeEvent ? incomeEvent.amount >= cond.value.amount : false;
+            return incomeEvent
+              ? incomeEvent.amount >= cond.value.amount
+              : false;
           }
         }
       });
@@ -390,4 +388,5 @@ export {
   makeRecurring,
   makeEvent,
   isEventActiveInMonth,
+  makeDependency,
 };

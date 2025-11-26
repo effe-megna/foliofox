@@ -469,6 +469,24 @@ describe("scenario planning", () => {
         );
       });
     });
+
+    describe.only("a", () => {
+      test("b", () => {
+        const scenario = makeScenario({
+          name: "test interests on cash",
+          events: [],
+        });
+
+        const result = runScenario({
+          scenario,
+          startDate: ld(2025, 1, 1),
+          endDate: ld(2025, 12, 31),
+          initialBalance: 0,
+        });
+
+        prettyLog(result);
+      });
+    });
   });
 
   describe("real-case scenario: Francesco's financial plan", () => {
@@ -682,8 +700,6 @@ describe("scenario planning", () => {
           expect.objectContaining({ name: "Mortgage Payment" }),
         ]),
       );
-
-      prettyLog(result.cashflow);
     });
   });
 });
