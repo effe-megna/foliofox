@@ -18,6 +18,8 @@ import {
   isWithinIntervalLD,
 } from "./local-date";
 import { makeDependency } from "./helpers";
+import type { PortfolioAsset, AssetBalance, ScenarioResultExtended } from "./types";
+import { generateDividendEvents } from "./dividend-generator";
 
 type Scenario = {
   name: string;
@@ -304,21 +306,89 @@ const toBalance = (input: {
   return balance;
 };
 
+const calculateAssetGrowth = (
+  initialValue: number,
+  monthlyRate: number,
+  numMonths: number,
+): number => {
+  return initialValue * Math.pow(1 + monthlyRate, numMonths);
+};
+
 const runScenario = (input: {
   scenario: Scenario;
   startDate: LocalDate;
   endDate: LocalDate;
   initialBalance: number;
-}): {
-  cashflow: Cashflow;
-  balance: Record<string, number>;
-} => {
-  const { scenario, startDate, endDate, initialBalance } = input;
+  portfolioAssets?: PortfolioAsset[];
+  growthRate?: number;
+  dividendYield?: number;
+}): ScenarioResultExtended => {
+  const {
+    scenario,
+    startDate,
+    endDate,
+    initialBalance,
+    portfolioAssets = [],
+    growthRate = 0.07,
+    dividendYield = 0.02,
+  } = input;
 
-  const cashflow = toCashflow({ scenario, startDate, endDate });
-  const balance = toBalance({ scenario, cashflow, initialBalance });
+  // Convert annual rate to monthly
+  const monthlyGrowthRate = Math.pow(1 + growthRate, 1 / 12) - 1;
 
-  return { cashflow, balance };
+  // Auto-generate dividend events from portfolio
+  const dividendEvents = generateDividendEvents(
+    portfolioAssets,
+    dividendYield,
+    startDate,
+    endDate,
+  );
+
+  const extendedScenario = {
+    ...scenario,
+    events: [...scenario.events, ...dividendEvents],
+  };
+
+  const cashflow = toCashflow({
+    scenario: extendedScenario,
+    startDate,
+    endDate,
+  });
+
+  const cashBalance = toBalance({
+    scenario: extendedScenario,
+    cashflow,
+    initialBalance,
+  });
+
+  // Calculate asset growth month-by-month
+  const assetBalance: Record<string, AssetBalance> = {};
+  const totalBalance: Record<string, number> = {};
+  const sortedMonths = Object.keys(cashBalance).sort();
+
+  sortedMonths.forEach((month, index) => {
+    assetBalance[month] = {};
+    let totalAssetValue = 0;
+
+    portfolioAssets.forEach((asset) => {
+      const assetValue = calculateAssetGrowth(
+        asset.initialValue,
+        monthlyGrowthRate,
+        index,
+      );
+      assetBalance[month][asset.id] = assetValue;
+      totalAssetValue += assetValue;
+    });
+
+    totalBalance[month] = cashBalance[month] + totalAssetValue;
+  });
+
+  return {
+    cashflow,
+    cashBalance,
+    assetBalance,
+    totalBalance,
+  };
 };
 
 const makeOneOff = (input: {
@@ -381,6 +451,10 @@ const makeRecurring = (input: {
 export {
   type Scenario,
   type ScenarioEvent,
+  type Cashflow,
+  type CashflowEntry,
+  type PortfolioAsset,
+  type ScenarioResultExtended,
   makeScenario,
   toCashflow,
   runScenario,
