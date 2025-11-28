@@ -14,6 +14,8 @@ import {
 import { fromJSDate, ld } from "@/lib/scenario-planning/local-date";
 import { generateDividendEvents } from "@/lib/scenario-planning/dividend-generator";
 import { ScenarioChart } from "@/components/dashboard/scenario-planning/scenario-chart";
+import { IncomeVsExpensesChart } from "@/components/dashboard/scenario-planning/income-vs-expenses-chart";
+import { CashVsInvestmentsChart } from "@/components/dashboard/scenario-planning/cash-vs-investments-chart";
 import { EventFlowTimeline } from "@/components/dashboard/scenario-planning/event-flow-timeline";
 import { CompactEventTimeline } from "@/components/dashboard/scenario-planning/compact-event-timeline";
 import { EventDetailsList } from "@/components/dashboard/scenario-planning/event-details-list";
@@ -347,6 +349,8 @@ export function ScenarioPlanningClient({
         <Tabs defaultValue="balance" className="space-y-4">
           <TabsList>
             <TabsTrigger value="balance">Balance Chart</TabsTrigger>
+            <TabsTrigger value="income-expenses">Income vs Expenses</TabsTrigger>
+            <TabsTrigger value="cash-investments">Cash vs Investments</TabsTrigger>
             <TabsTrigger value="logic">Event Logic</TabsTrigger>
           </TabsList>
 
@@ -406,6 +410,124 @@ export function ScenarioPlanningClient({
                     currency="USD"
                     privacyMode={false}
                     analysis={analysis}
+                    scale={scale}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="income-expenses" className="space-y-4">
+            {/* Income vs Expenses Chart Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col gap-1.5">
+                    <CardTitle>Income vs Expenses</CardTitle>
+                    <CardDescription>
+                      Compare income and expense trends over time
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select
+                      value={scale}
+                      onValueChange={(value) =>
+                        setScale(value as "monthly" | "quarterly" | "yearly")
+                      }
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Scale" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={timeHorizon}
+                      onValueChange={(value) =>
+                        setTimeHorizon(value as "2" | "5" | "10" | "30")
+                      }
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Time horizon" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">2 years</SelectItem>
+                        <SelectItem value="5">5 years</SelectItem>
+                        <SelectItem value="10">10 years</SelectItem>
+                        <SelectItem value="30">30 years</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px]">
+                  <IncomeVsExpensesChart
+                    result={scenarioResult}
+                    currency="USD"
+                    privacyMode={false}
+                    scale={scale}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="cash-investments" className="space-y-4">
+            {/* Cash vs Investments Chart Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col gap-1.5">
+                    <CardTitle>Cash vs Investments</CardTitle>
+                    <CardDescription>
+                      Track your asset allocation between cash and portfolio investments
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Select
+                      value={scale}
+                      onValueChange={(value) =>
+                        setScale(value as "monthly" | "quarterly" | "yearly")
+                      }
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Scale" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={timeHorizon}
+                      onValueChange={(value) =>
+                        setTimeHorizon(value as "2" | "5" | "10" | "30")
+                      }
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Time horizon" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">2 years</SelectItem>
+                        <SelectItem value="5">5 years</SelectItem>
+                        <SelectItem value="10">10 years</SelectItem>
+                        <SelectItem value="30">30 years</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px]">
+                  <CashVsInvestmentsChart
+                    result={scenarioResult}
+                    currency="USD"
+                    privacyMode={false}
                     scale={scale}
                   />
                 </div>
