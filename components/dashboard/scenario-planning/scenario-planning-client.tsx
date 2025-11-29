@@ -23,6 +23,16 @@ import { EventToggleToolbar } from "@/components/dashboard/scenario-planning/eve
 import { analyzeEventDependencies } from "@/lib/scenario-planning/event-analyzer";
 import type { EventDependencyAnalysis } from "@/lib/scenario-planning/event-analyzer";
 import {
+  calculateBalanceAnalytics,
+  calculateIncomeExpensesAnalytics,
+  calculateCashInvestmentsAnalytics,
+} from "@/lib/scenario-analytics";
+import {
+  BalanceAnalyticsCards,
+  IncomeExpensesAnalyticsCards,
+  CashInvestmentsAnalyticsCards,
+} from "@/components/dashboard/scenario-planning/analytics-cards";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -314,6 +324,19 @@ export function ScenarioPlanningClient({
     return analyzeEventDependencies(scenario, scenarioResult);
   }, [scenario, scenarioResult]);
 
+  // Calculate analytics for each chart
+  const balanceAnalytics = useMemo(() => {
+    return calculateBalanceAnalytics(scenarioResult, new Date(), endDate);
+  }, [scenarioResult, endDate]);
+
+  const incomeExpensesAnalytics = useMemo(() => {
+    return calculateIncomeExpensesAnalytics(scenarioResult);
+  }, [scenarioResult]);
+
+  const cashInvestmentsAnalytics = useMemo(() => {
+    return calculateCashInvestmentsAnalytics(scenarioResult, new Date(), endDate);
+  }, [scenarioResult, endDate]);
+
   // Handle event toggle with cascade
   const handleEventToggle = useCallback(
     (eventName: string, enabled: boolean) => {
@@ -415,6 +438,9 @@ export function ScenarioPlanningClient({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Balance Chart Analytics */}
+            <BalanceAnalyticsCards analytics={balanceAnalytics} currency="USD" />
           </TabsContent>
 
           <TabsContent value="income-expenses" className="space-y-4">
@@ -474,6 +500,9 @@ export function ScenarioPlanningClient({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Income vs Expenses Analytics */}
+            <IncomeExpensesAnalyticsCards analytics={incomeExpensesAnalytics} currency="USD" />
           </TabsContent>
 
           <TabsContent value="cash-investments" className="space-y-4">
@@ -533,6 +562,9 @@ export function ScenarioPlanningClient({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Cash vs Investments Analytics */}
+            <CashInvestmentsAnalyticsCards analytics={cashInvestmentsAnalytics} currency="USD" />
           </TabsContent>
 
           <TabsContent value="logic" className="space-y-4">
